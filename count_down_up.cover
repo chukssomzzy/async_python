@@ -1,0 +1,174 @@
+    1: """Build Your Own Async"""
+       
+    1: from collections import deque
+    1: import queue
+    1: import threading
+    1: import time
+    1: import heapq
+       
+       # Scheduler
+       # the function to a scheduler ends or return immediately while still scheduling
+       # another instance of the function to run immediately after it done running.
+       # the function would only end when it meets a particular condition
+       
+       
+       #
+       #
+       # def countdown(n):
+       #     """just count down arg"""
+       #     while n > 0:
+       #         print("Down", n)
+       #         time.sleep(1)
+       #         n -= 1
+       #
+       #
+       # def countup(stop):
+       #     x = 0
+       #     while x < stop:
+       #         print("Up", x)
+       #         time.sleep(1)
+       #         x += 1
+       #
+       
+       # Sequential execution
+       # countdown(5)
+       # countup(5)
+       
+       # concurrent execution
+       # classic solution: use threads
+       
+       # threading.Thread(target=countdown, args=(5,)).start()
+       # threading.Thread(target=countup, args=(5,)).start()
+       
+       # How do you do concurrency without thread
+       # gotchas
+       # thread are hard to kill, control and manage
+       
+       # let try run countDown and countUp without threading
+       
+       
+       # problem: How to achieve concurrency without threads?
+       # issue: find a way to switch back and forth between task (context switching)
+       
+       # Approach
+       
+       
+    2: class Scheduler:
+    1:     def __init__(self):
+    1:         self.ready = deque()
+    1:         self.sleeping = []
+    1:         self.sequence = 0
+       
+    1:     def __call__(self, func, delay=0):
+    3:         if delay:
+    1:             self.sequence += 1
+    1:             deadline = time.time() + delay
+    1:             heapq.heappush(self.sleeping, (deadline, self.sequence, func))
+    1:             self.sleeping.sort()
+               else:
+    2:             self.ready.append(func)
+       
+    1:     def run(self):
+    1:         while self.ready or self.sleeping:
+    1:             if not self.ready:
+                       # find the nearest deadline
+                       deadline, _, func = heapq.heappop(self.sleeping)
+                       delta = deadline - time.time()
+                       if delta > 0:
+                           time.sleep(delta)
+                       self.ready.append(func)
+    1:             while self.ready:
+    1:                 func = self.ready.popleft()
+    1:                 return func()
+       
+       
+    1: sched = Scheduler()
+       
+       
+       # def countdown(n):
+       #     if n > 0:
+       #         print('Down', n)
+       #         # time.sleep(1)  # Blocking call (nothing else can run)
+       #         sched(lambda: countdown(n - 1), 1)
+       #
+       #
+       # def countup(stop, x=0):
+       #     if x < stop:
+       #         print('Up', x)
+       #         sched(lambda: countup(stop, x + 1), 4)
+       #
+       #
+       # sched(lambda: countdown(20))
+       # sched(lambda: countup(5))
+       # sched.run()
+       #
+       
+       # Corner Cases
+       
+       # let say you have a function f and g
+       
+       # def f():
+       #   pass
+       #
+       # def g():
+       #   pass
+       #
+       # sleeping = [(f, 2), (g, 2)]  # same deadline. Two functions
+       # sleeping.sort()
+       # Error:
+       #    TypeError: '<' not supported instances of 'function' and 'function'
+       # solution:
+       #    add a sequence to the heapq argumement for tie breaking so
+       # function never get compared
+       
+       # Producer - Consumer problem
+       # Challenge: How to implement the same functionality, but no threads
+       # Use Scheduler
+       
+       
+    2: class AsyncQueue:
+    1:     def __init__(self):
+    1:         self.items = deque()
+    1:         self.waiting = deque()
+       
+    1:     def put(self, item):
+    1:         self.items.append(item)
+    1:         if self.waiting:
+                   func = self.waiting.popleft()
+                   sched(func)
+                   # func() ----> deep nested call
+       
+    1:     def get(self, callback):
+               # wait till something is available
+               if self.items:
+                   callback(self.items.popleft())
+               else:
+                   self.waiting.append(lambda: self.get(callback))
+       
+       
+    1: def producer(q, count):
+    1:     def _run(n):
+    1:         if n < count:
+    1:             print("Producing", n)
+    1:             q.put(n)
+    1:             sched(lambda: _run(n + 1), 1)
+               else:
+                   print("Producer Done")
+                   q.put(None)
+    1:     _run(0)
+       
+       
+    1: def consumer(q):
+           def _run(n):
+               if n is not None:
+                   print("consuming", n)
+                   sched(lambda: q.get(_run))
+               else:
+                   print("Consumer done")
+           q.get(_run)
+       
+       
+    1: q = AsyncQueue()
+    2: sched(lambda: producer(q, 10))
+    1: sched(lambda: consumer(q))
+    1: sched.run()
